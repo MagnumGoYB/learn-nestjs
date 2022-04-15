@@ -6,6 +6,7 @@ import { AppService } from './app.service'
 import { AuthModule } from './auth/auth.module'
 import { SmsModule } from './sms/sms.module'
 import { UserModule } from './user/user.module'
+import { CollectionModule } from './collection/collection.module'
 import RedisConfig from './config/redis.config'
 
 @Module({
@@ -20,7 +21,8 @@ import RedisConfig from './config/redis.config'
     }),
     AuthModule,
     UserModule,
-    SmsModule
+    SmsModule,
+    CollectionModule
   ],
   controllers: [AppController],
   providers: [AppService]

@@ -7,18 +7,19 @@ import {
   Request,
   UnauthorizedException
 } from '@nestjs/common'
-import { ApiBearerAuth, ApiBody, ApiTags } from '@nestjs/swagger'
-import { User } from '@prisma/client'
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { AppService } from './app.service'
 import { LoginCaptchaDto, LoginDto, LoginTypeEnum } from './app.dto'
 import { JWTAuthGuard } from './auth/auth.guard'
 import { SmsService } from './sms/sms.service'
+import { RequestWithJWTUserDto } from './user/dto/user.dto'
 
-@ApiTags('全局')
+@ApiTags('Global')
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService, private readonly smsService: SmsService) {}
 
+  @ApiOperation({ summary: '登录' })
   @ApiBody({
     type: LoginDto,
     examples: {
@@ -51,6 +52,7 @@ export class AppController {
     }
   }
 
+  @ApiOperation({ summary: '获取手机登录验证码' })
   @Post('login/captcha')
   async getLoginCaptcha(
     @Body()
@@ -59,10 +61,14 @@ export class AppController {
     await this.smsService.sendLoginCode(phone)
   }
 
+  @ApiOperation({ summary: '获取登录态信息' })
   @ApiBearerAuth()
-  @Get('profile')
   @UseGuards(JWTAuthGuard)
-  async getProfile(@Request() req: { user: { userId: User['id'] } }) {
+  @Get('profile')
+  async getProfile(
+    @Request()
+    req: RequestWithJWTUserDto
+  ) {
     const { userId } = req.user
     if (!userId) {
       throw new UnauthorizedException()

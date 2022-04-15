@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,23 +7,89 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id          String       @id @default(cuid())
+  name        String?
+  email       String?      @unique
+  phone       String?      @unique
+  wxId        String?      @unique
+  wbId        String?      @unique
+  role        Role         @default(USER)
+  isDeleted   Boolean      @default(false) @map("is_deleted")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  collections Collection[]
+  orders      Order[]
+
+  @@map("users")
+}
+
+model Collection {
+  id           String           @id @default(cuid())
+  title        String?
+  pricing      Float
+  creatorId    String           @map("creator_id")
+  isDeleted    Boolean          @default(false) @map("is_deleted")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+  contractType ContractTypeEnum @map("contract_type")
+  stockId      String           @unique @map("stock_id")
+  creator      User             @relation(fields: [creatorId], references: [id])
+  stock        Stock            @relation(fields: [stockId], references: [id])
+  orders       Order?
+
+  @@map("collections")
+}
+
+model Stock {
+  id         String      @id @default(cuid())
+  quantity   Int         @default(1)
+  isDeleted  Boolean     @default(false) @map("is_deleted")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+  total      Int         @default(1)
+  collection Collection?
+
+  @@map("stocks")
+}
+
+model Order {
+  id           String          @id @default(cuid())
+  number       String          @unique
+  pricing      Float
+  status       OrderStatusEnum @default(PENDING)
+  payWay       OrderPayWayEnum @map("pay_way")
+  expiredAt    DateTime        @map("expired_at")
+  paidAt       DateTime?       @map("paid_at")
+  collectionId String          @unique @map("collection_id")
+  isDeleted    Boolean         @default(false) @map("is_deleted")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+  ownerId      String          @map("owner_id")
+  collection   Collection      @relation(fields: [collectionId], references: [id])
+  owner        User            @relation(fields: [ownerId], references: [id])
+
+  @@map("orders")
+}
+
 enum Role {
   USER
   ADMIN
 }
 
-model User {
-  id    String  @id @default(cuid())
-  name  String?
-  email String? @unique
-  phone String? @unique
-  wxId  String? @unique
-  wbId  String? @unique
-  role  Role    @default(USER)
+enum ContractTypeEnum {
+  ERC_721
+  ERC_1155
+}
 
-  isDeleted Boolean  @default(false) @map("is_deleted")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+enum OrderStatusEnum {
+  PENDING
+  DONED
+  FAILED
+  INVALID
+}
 
-  @@map("users")
+enum OrderPayWayEnum {
+  ALIPAY
+  WECHAT
 }

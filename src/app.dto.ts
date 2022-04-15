@@ -1,10 +1,24 @@
 import { ApiProperty } from '@nestjs/swagger'
 import { User } from '@prisma/client'
-import { IsEnum, IsNotEmpty, IsPhoneNumber, Length, ValidateIf } from 'class-validator'
+import {
+  isDefined,
+  IsEnum,
+  IsMobilePhone,
+  IsNotEmpty,
+  IsNumberString,
+  Length,
+  ValidateIf
+} from 'class-validator'
+import { UserDto } from './user/dto/user.dto'
 
 export enum LoginTypeEnum {
   phone,
   wechat
+}
+
+export enum OrderByEnum {
+  asc,
+  desc
 }
 
 export class LoginDto {
@@ -18,7 +32,7 @@ export class LoginDto {
   })
   @ValidateIf((dto: LoginDto) => +LoginTypeEnum[dto.type] === LoginTypeEnum.phone)
   @IsNotEmpty()
-  @IsPhoneNumber('CN')
+  @IsMobilePhone('zh-CN')
   readonly phone?: string
 
   @ApiProperty({
@@ -47,20 +61,44 @@ export class LoginResultDto {
 export class LoginCaptchaDto {
   @ApiProperty({ title: '手机' })
   @IsNotEmpty()
-  @IsPhoneNumber('CN')
+  @IsMobilePhone('zh-CN')
   readonly phone: string
 }
 
-export class ProfileDto implements Pick<User, 'id' | 'name' | 'phone' | 'email'> {
-  @ApiProperty({ title: '用户ID' })
-  id: User['id']
-
-  @ApiProperty({ title: '昵称' })
-  name: User['name'] | null
-
+export class ProfileDto extends UserDto {
   @ApiProperty({ title: '手机号' })
-  phone: User['phone'] | null
+  readonly phone: User['phone'] | null
 
   @ApiProperty({ title: '邮箱' })
-  email: User['email'] | null
+  readonly email: User['email'] | null
+
+  @ApiProperty({ title: '微信ID' })
+  readonly wxId: User['wxId'] | null
+
+  @ApiProperty({ title: '微博ID' })
+  readonly wbId: User['wbId'] | null
+}
+
+export class PaginationDto {
+  @ApiProperty({ title: '页码', description: '页码' })
+  @ValidateIf((dto: PaginationDto) => isDefined(dto.page))
+  @IsNumberString({ no_symbols: true })
+  readonly page?: number
+
+  @ApiProperty({ title: '条数限制', description: '条数限制' })
+  @ValidateIf((dto: PaginationDto) => isDefined(dto.limit))
+  @IsNumberString({ no_symbols: true })
+  readonly limit?: number
+}
+
+export class DefaultOrderByDto {
+  @ApiProperty({ enum: OrderByEnum, title: '创建时间', description: '创建时间排序' })
+  @ValidateIf((dto: DefaultOrderByDto) => isDefined(dto.createdAt))
+  @IsEnum(OrderByEnum)
+  readonly createdAt?: OrderByEnum
+
+  @ApiProperty({ enum: OrderByEnum, title: '更新时间', description: '更新时间排序' })
+  @ValidateIf((dto: DefaultOrderByDto) => isDefined(dto.updatedAt))
+  @IsEnum(OrderByEnum)
+  readonly updatedAt?: OrderByEnum
 }

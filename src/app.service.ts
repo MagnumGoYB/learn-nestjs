@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common'
+import { BadRequestException, Injectable } from '@nestjs/common'
 import { User } from '@prisma/client'
 import { LoginDto, LoginResultDto, ProfileDto } from './app.dto'
 import { AuthService } from './auth/auth.service'
 import { SmsService } from './sms/sms.service'
+import { JWTUserDto, UserRole } from './user/dto/user.dto'
 import { UserService } from './user/user.service'
 
 @Injectable()
@@ -16,22 +17,30 @@ export class AppService {
   async loginWithCaptcha(body: Pick<LoginDto, 'phone' | 'captcha'>): Promise<LoginResultDto> {
     await this.smsService.verifyLoginCode(body.phone, body.captcha)
 
-    let userId
+    let user: JWTUserDto
     const existUser = await this.userService.findOneByPhone(body.phone)
 
     if (!existUser) {
       console.log('新用户注册 -> ', body.phone)
       const newUser = await this.userService.createUser({ phone: body.phone })
-      userId = newUser.id
+      user = {
+        userId: newUser.id,
+        role: UserRole[newUser.role]
+      }
     } else {
-      userId = existUser.id
+      user = {
+        userId: existUser.id,
+        role: UserRole[existUser.role]
+      }
     }
 
-    return this.authService.sign(userId)
+    return this.authService.sign(user)
   }
 
   async loginWithWeChat(body: LoginDto): Promise<LoginResultDto> {
-    return { accessToken: body.toString() }
+    // TODO 微信授权登录
+    console.log(body)
+    throw new BadRequestException()
   }
 
   async getProfile(userId: User['id']): Promise<ProfileDto> {
@@ -39,7 +48,9 @@ export class AppService {
       id: user.id,
       name: user.name,
       phone: user.phone,
-      email: user.email
+      email: user.email,
+      wxId: user.wxId,
+      wbId: user.wbId
     }))
   }
 }

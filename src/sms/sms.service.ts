@@ -15,7 +15,9 @@ export class SmsService {
         possibility: '0123456789',
         length: 6
       })
-      const ok = await this.redisClient.set(`LOGIN:${phone}:CODE`, code, 'EX', 60, 'NX')
+
+      // Redis 限制 5 分钟内只能获取一次验证码
+      const ok = await this.redisClient.set(`LOGIN:${phone}:CODE`, code, 'EX', 60 * 5, 'NX')
 
       // TODO 短信服务SDK
 
