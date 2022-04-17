@@ -18,7 +18,7 @@ import { CollectionService } from './collection.service'
 import { CollectionCreateDto } from './dto/collection-create.dto'
 import { GetCollectionsQueryDto } from './dto/collection.dto'
 
-@ApiTags('Collection')
+@ApiTags('藏品')
 @ApiBearerAuth()
 @UseGuards(JWTAuthGuard)
 @Controller('collections')
@@ -88,9 +88,11 @@ export class CollectionController {
   @ApiParam({ name: 'id', description: '藏品ID', type: 'string' })
   @Delete(':id')
   async deleteCollection(
+    @Request()
+    { user }: RequestWithJWTUserDto,
     @Param('id')
     id: Collection['id']
   ) {
-    return await this.collectionService.deleteCollection(id)
+    return await this.collectionService.deleteCollectionWithCreator(id, user.userId)
   }
 }

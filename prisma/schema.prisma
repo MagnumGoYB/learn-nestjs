@@ -8,37 +8,52 @@ datasource db {
 }
 
 model User {
-  id          String       @id @default(cuid())
+  id          String               @id @default(cuid())
   name        String?
-  email       String?      @unique
-  phone       String?      @unique
-  wxId        String?      @unique
-  wbId        String?      @unique
-  role        Role         @default(USER)
-  isDeleted   Boolean      @default(false) @map("is_deleted")
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
-  collections Collection[]
+  email       String?              @unique
+  phone       String?              @unique
+  wxId        String?              @unique
+  wbId        String?              @unique
+  role        Role                 @default(USER)
+  isDeleted   Boolean              @default(false) @map("is_deleted")
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+  createds    Collection[]
+  collections CollectionRelOwner[]
   orders      Order[]
 
   @@map("users")
 }
 
 model Collection {
-  id           String           @id @default(cuid())
+  id           String               @id @default(cuid())
   title        String?
   pricing      Float
-  creatorId    String           @map("creator_id")
-  isDeleted    Boolean          @default(false) @map("is_deleted")
-  createdAt    DateTime         @default(now()) @map("created_at")
-  updatedAt    DateTime         @updatedAt @map("updated_at")
-  contractType ContractTypeEnum @map("contract_type")
-  stockId      String           @unique @map("stock_id")
-  creator      User             @relation(fields: [creatorId], references: [id])
-  stock        Stock            @relation(fields: [stockId], references: [id])
+  creatorId    String               @map("creator_id")
+  isDeleted    Boolean              @default(false) @map("is_deleted")
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
+  contractType ContractTypeEnum     @map("contract_type")
+  stockId      String               @unique @map("stock_id")
+  creator      User                 @relation(fields: [creatorId], references: [id])
+  stock        Stock                @relation(fields: [stockId], references: [id])
   orders       Order?
+  owners       CollectionRelOwner[]
 
   @@map("collections")
+}
+
+model CollectionRelOwner {
+  onwer        User       @relation(fields: [onwerId], references: [id])
+  onwerId      String     @map("owner_id")
+  collection   Collection @relation(fields: [collectionId], references: [id])
+  collectionId String     @map("collection_id")
+  isDeleted    Boolean    @default(false) @map("is_deleted")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  @@id([onwerId, collectionId])
+  @@map("collection_rel_owner")
 }
 
 model Stock {

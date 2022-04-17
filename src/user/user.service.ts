@@ -14,7 +14,25 @@ export class UserService {
 
   async findOneById(id: User['id']): Promise<User> {
     return this.prismaService.user.findUnique({
-      where: { id }
+      where: { id },
+      include: {
+        createds: {
+          select: {
+            id: true,
+            title: true
+          }
+        },
+        collections: {
+          include: {
+            collection: {
+              select: {
+                id: true,
+                title: true
+              }
+            }
+          }
+        }
+      }
     })
   }
 

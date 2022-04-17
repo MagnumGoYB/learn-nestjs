@@ -14,7 +14,7 @@ import { JWTAuthGuard } from './auth/auth.guard'
 import { SmsService } from './sms/sms.service'
 import { RequestWithJWTUserDto } from './user/dto/user.dto'
 
-@ApiTags('Global')
+@ApiTags('通用')
 @Controller()
 export class AppController {
   constructor(private readonly appService: AppService, private readonly smsService: SmsService) {}

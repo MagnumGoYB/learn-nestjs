@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common'
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import { Collection, ContractTypeEnum, Prisma, Stock } from '@prisma/client'
 import { PrismaService } from '@/prisma/prisma.service'
 import { JWTUserDto } from '@/user/dto/user.dto'
@@ -8,32 +8,6 @@ import { CollectionDto, ContractTypeEnumDto, GetCollectionsQueryDto } from './dt
 @Injectable()
 export class CollectionService {
   constructor(private readonly prismaService: PrismaService) {}
-
-  private async findOneById(id: Collection['id']) {
-    return await this.prismaService.collection
-      .findFirst({
-        rejectOnNotFound: true,
-        where: { id, isDeleted: false },
-        include: {
-          creator: {
-            select: {
-              id: true,
-              name: true
-            }
-          },
-          stock: {
-            select: {
-              total: true,
-              quantity: true
-            }
-          }
-        }
-      })
-      .then((collection) => ({
-        ...collection,
-        contractType: ContractTypeEnumDto[collection.contractType]
-      }))
-  }
 
   private async updateById(id: Collection['id'], data: Prisma.CollectionUpdateInput) {
     return await this.prismaService.collection.update({ where: { id }, data })
@@ -92,12 +66,31 @@ export class CollectionService {
   }
 
   async getCollection(id: Collection['id']): Promise<CollectionDto> {
-    const collection = await this.findOneById(id)
+    const collection = await this.prismaService.collection.findFirst({
+      where: { id, isDeleted: false },
+      include: {
+        creator: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        stock: {
+          select: {
+            total: true,
+            quantity: true
+          }
+        }
+      }
+    })
+    if (!collection) {
+      throw new NotFoundException()
+    }
     return {
       id: collection.id,
       title: collection.title,
       pricing: collection.pricing,
-      contractType: collection.contractType,
+      contractType: ContractTypeEnumDto[collection.contractType],
       creator: collection.creator,
       stock: collection.stock
     }
@@ -124,7 +117,11 @@ export class CollectionService {
         },
         orderBy: {
           createdAt: Prisma.SortOrder[query.createdAt],
-          updatedAt: Prisma.SortOrder[query.updatedAt]
+          updatedAt: Prisma.SortOrder[query.updatedAt],
+          stock: {
+            total: Prisma.SortOrder[query.stockTotal],
+            quantity: Prisma.SortOrder[query.stockQuantity]
+          }
         },
         include: {
           creator: {
@@ -137,6 +134,16 @@ export class CollectionService {
             select: {
               total: true,
               quantity: true
+            }
+          },
+          owners: {
+            include: {
+              onwer: {
+                select: {
+                  id: true,
+                  name: true
+                }
+              }
             }
           }
         },
@@ -160,7 +167,19 @@ export class CollectionService {
     }))
   }
 
-  async deleteCollection(id: Collection['id']) {
-    return await this.deleteById(id)
+  async deleteCollectionWithCreator(id: Collection['id'], creatorId: Collection['creatorId']) {
+    const collection = await this.prismaService.collection.findUnique({
+      where: { id },
+      select: {
+        creatorId: true
+      }
+    })
+    if (!collection) {
+      throw new NotFoundException()
+    }
+    if (collection.creatorId !== creatorId) {
+      throw new ForbiddenException()
+    }
+    await this.deleteById(id)
   }
 }
