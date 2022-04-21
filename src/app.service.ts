@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common'
+import { BadRequestException, Injectable, Logger } from '@nestjs/common'
 import { User } from '@prisma/client'
 import { LoginDto, LoginResultDto, ProfileDto } from './app.dto'
 import { AuthService } from './auth/auth.service'
@@ -8,6 +8,8 @@ import { UserService } from './user/user.service'
 
 @Injectable()
 export class AppService {
+  private readonly logger = new Logger(AppService.name)
+
   constructor(
     private readonly userService: UserService,
     private readonly authService: AuthService,
@@ -21,7 +23,7 @@ export class AppService {
     const existUser = await this.userService.findOneByPhone(body.phone)
 
     if (!existUser) {
-      console.log('新用户注册 -> ', body.phone)
+      this.logger.log('新用户注册', body.phone)
       const newUser = await this.userService.createUser({ phone: body.phone })
       user = {
         userId: newUser.id,
@@ -39,7 +41,7 @@ export class AppService {
 
   async loginWithWeChat(body: LoginDto): Promise<LoginResultDto> {
     // TODO 微信授权登录
-    console.log(body)
+    this.logger.log(body)
     throw new BadRequestException()
   }
 

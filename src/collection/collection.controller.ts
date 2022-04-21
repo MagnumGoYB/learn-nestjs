@@ -10,13 +10,20 @@ import {
   Query,
   Delete
 } from '@nestjs/common'
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger'
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiOperation,
+  ApiParam,
+  ApiResponse,
+  ApiTags
+} from '@nestjs/swagger'
 import { Collection } from '@prisma/client'
 import { JWTAuthGuard } from '@/auth/auth.guard'
 import { RequestWithJWTUserDto, UserRole } from '@/user/dto/user.dto'
 import { CollectionService } from './collection.service'
 import { CollectionCreateDto } from './dto/collection-create.dto'
-import { GetCollectionsQueryDto } from './dto/collection.dto'
+import { QueryCollectionsDto } from './dto/collection-query.dto'
 
 @ApiTags('藏品')
 @ApiBearerAuth()
@@ -76,10 +83,17 @@ export class CollectionController {
   }
 
   @ApiOperation({ summary: '获取藏品列表' })
+  @ApiResponse({
+    headers: {
+      'X-Total-Count': {
+        description: '返回数据总数'
+      }
+    }
+  })
   @Get()
   async getCollections(
     @Query()
-    query: GetCollectionsQueryDto
+    query: QueryCollectionsDto
   ) {
     return await this.collectionService.getCollections(query)
   }

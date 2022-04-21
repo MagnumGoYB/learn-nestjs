@@ -69,9 +69,7 @@ model Stock {
 }
 
 model Order {
-  id           String          @id @default(cuid())
-  number       String          @unique
-  pricing      Float
+  id           String          @unique
   status       OrderStatusEnum @default(PENDING)
   payWay       OrderPayWayEnum @map("pay_way")
   expiredAt    DateTime        @map("expired_at")
@@ -106,5 +104,5 @@ enum OrderStatusEnum {
 
 enum OrderPayWayEnum {
   ALIPAY
-  WECHAT
+  WECHATPAY
 }

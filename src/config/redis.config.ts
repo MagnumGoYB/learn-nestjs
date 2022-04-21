@@ -8,7 +8,7 @@ export default registerAs<RedisModuleOptions>('redis', () => ({
     port: process.env.REDIS_PORT ? +process.env.REDIS_PORT : 6379,
     keyPrefix:
       process.env.REDIS_KEY_PREFIX ?? process.env.npm_package_name
-        ? process.env.npm_package_name.toUpperCase() + ':'
+        ? process.env.npm_package_name.toUpperCase()
         : ''
   }
 }))

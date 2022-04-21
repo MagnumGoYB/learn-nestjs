@@ -1,20 +1,58 @@
+import Redis from 'ioredis'
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
+import { InjectRedis } from '@liaoliaots/nestjs-redis'
 import { Collection, ContractTypeEnum, Prisma, Stock } from '@prisma/client'
 import { PrismaService } from '@/prisma/prisma.service'
+import { GlobalConfigOptions } from '@/config'
 import { JWTUserDto } from '@/user/dto/user.dto'
 import { CollectionCreateResultDto } from './dto/collection-create.dto'
-import { CollectionDto, ContractTypeEnumDto, GetCollectionsQueryDto } from './dto/collection.dto'
+import { CollectionDto, ContractTypeEnumDto } from './dto/collection.dto'
+import { QueryCollectionsDto } from './dto/collection-query.dto'
 
 @Injectable()
 export class CollectionService {
-  constructor(private readonly prismaService: PrismaService) {}
+  private readonly seckillKeyPrefix: string
 
-  private async updateById(id: Collection['id'], data: Prisma.CollectionUpdateInput) {
-    return await this.prismaService.collection.update({ where: { id }, data })
+  constructor(
+    private readonly configService: ConfigService,
+    @InjectRedis() private readonly redisClient: Redis,
+    private readonly prismaService: PrismaService
+  ) {
+    this.seckillKeyPrefix = this.configService.get<GlobalConfigOptions>('global').seckillKeyPrefix
   }
 
-  private async deleteById(id: Collection['id']) {
-    return await this.updateById(id, { isDeleted: true })
+  async createSeckillStock(collectionId: Collection['id'], stockQuantity: Stock['quantity']) {
+    // 添加 Redis 秒杀库存
+    const redisKey = `${this.seckillKeyPrefix}:${collectionId.toUpperCase()}`
+    return await this.redisClient.hmset(redisKey, {
+      collectionId,
+      total: stockQuantity
+    })
+  }
+
+  async deleteSeckillStock(collectionId: Collection['id']) {
+    const redisKey = `${this.seckillKeyPrefix}:${collectionId.toUpperCase()}`
+    return await this.redisClient.del(redisKey)
+  }
+
+  async returnSeckillStock(collectionId: Collection['id'], number?: number) {
+    const redisKey = `${this.seckillKeyPrefix}:${collectionId.toUpperCase()}`
+    return await this.redisClient.hincrby(redisKey, 'total', number ?? 1)
+  }
+
+  private updateById(id: Collection['id'], data: Prisma.CollectionUpdateInput) {
+    return this.prismaService.collection.update({ where: { id }, data })
+  }
+
+  private deleteById(id: Collection['id']) {
+    return this.updateById(id, { isDeleted: true }).then(async (collection) => {
+      this.deleteSeckillStock(collection.id)
+      return {
+        ...collection,
+        contractType: ContractTypeEnumDto[collection.contractType]
+      }
+    })
   }
 
   async userCreateCollection(
@@ -59,10 +97,14 @@ export class CollectionService {
           }
         }
       })
-      .then((collection) => ({
-        ...collection,
-        contractType: ContractTypeEnumDto[collection.contractType]
-      }))
+      .then(async (collection) => {
+        const stockQuantity = contractType === ContractTypeEnumDto.ERC_1155 ? quantity : 1
+        await this.createSeckillStock(collection.id, stockQuantity)
+        return {
+          ...collection,
+          contractType: ContractTypeEnumDto[collection.contractType]
+        }
+      })
   }
 
   async getCollection(id: Collection['id']): Promise<CollectionDto> {
@@ -96,7 +138,7 @@ export class CollectionService {
     }
   }
 
-  async getCollections(query: GetCollectionsQueryDto): Promise<CollectionDto[]> {
+  async getCollections(query: QueryCollectionsDto): Promise<CollectionDto[]> {
     const { page = 1, limit = 10 } = query
     const skip = page > 1 ? page * limit : 0
     const take = limit
@@ -181,5 +223,29 @@ export class CollectionService {
       throw new ForbiddenException()
     }
     await this.deleteById(id)
+  }
+
+  decrCollectionStock(id: Collection['id'], number?: number) {
+    return this.updateById(id, {
+      stock: {
+        update: {
+          quantity: {
+            decrement: number ?? 1
+          }
+        }
+      }
+    })
+  }
+
+  incrCollectionStock(id: Collection['id'], number?: number) {
+    return this.updateById(id, {
+      stock: {
+        update: {
+          quantity: {
+            increment: number ?? 1
+          }
+        }
+      }
+    })
   }
 }
