@@ -8,7 +8,7 @@ import { PrismaService } from '@/prisma/prisma.service'
 import { CollectionService } from '@/collection/collection.service'
 import { OrderService } from './order.service'
 
-@Processor('ORDER')
+@Processor('QUEUE:ORDER')
 export class OrderProcessor {
   private readonly logger = new Logger(OrderProcessor.name)
 
@@ -21,27 +21,30 @@ export class OrderProcessor {
 
   @Process('create')
   async handleCreate(job: Job<Prisma.OrderUncheckedCreateInput>) {
-    this.logger.debug('实体订单入库任务开始...', job.data)
+    this.logger.debug(`#${job.id} 实体订单入库任务开始...`, job.data)
     const { collectionId, ownerId, ...data } = job.data
-    // 检查 Redis 订单是否未过期 决定实体订单状态是否为 INVALID
-    const isNotExpired = await this.redisClient.exists(
-      this.orderService.getSeckillOrderKey(collectionId, ownerId)
-    )
-    // 事务 -> 创建实体订单、扣实体库存
-    // 创建实体订单
-    const createOrder = this.orderService.create(
-      { ...data, status: isNotExpired ? 'PENDING' : 'INVALID' },
-      collectionId,
-      ownerId
-    )
-    // 扣藏品实体库存
-    const decrCollectionStock = this.collectionService.decrCollectionStock(collectionId)
-
     try {
+      // 检查 Redis 订单是否存在
+      const isHasRedisOrder = await this.redisClient.exists(
+        this.orderService.getSeckillOrderKey(collectionId, ownerId)
+      )
+
+      if (!isHasRedisOrder) {
+        throw new Error('Redis 订单不存在')
+      }
+
+      // 事务 -> 创建实体订单、扣实体库存
+      // 创建实体订单
+      const createOrder = this.orderService.create(data, collectionId, ownerId)
+      // 扣藏品实体库存
+      const decrCollectionStock = this.collectionService.decrCollectionStock(collectionId)
+
       await this.prismaService.$transaction([createOrder, decrCollectionStock])
-      this.logger.debug('实体订单入库任务完成')
+      this.logger.debug(`#${job.id} 实体订单入库任务完成`)
+      job.moveToCompleted()
     } catch (error) {
-      this.logger.debug(error)
+      this.logger.error(`#${job.id} 实体订单入库任务失败`, error)
+      job.moveToFailed(error)
     }
   }
 

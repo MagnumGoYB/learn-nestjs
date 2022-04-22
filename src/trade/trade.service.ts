@@ -1,5 +1,7 @@
 import Redis from 'ioredis'
 import dayjs from 'dayjs'
+import FlakeId from 'flake-idgen'
+import intformat from 'biguint-format'
 import { BadRequestException, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { InjectRedis } from '@liaoliaots/nestjs-redis'
@@ -8,17 +10,22 @@ import { Collection } from '@prisma/client'
 import { JWTUserDto } from '@/user/dto/user.dto'
 import { GlobalConfigOptions } from '@/config'
 import { OrderPayWayEnumDto } from '@/order/dto/order.dto'
+import { LockService } from '@/lock/lock.service'
+import { PrismaService } from '@/prisma/prisma.service'
 
 @Injectable()
 export class TradeService {
   private readonly logger = new Logger(TradeService.name)
+  private readonly flakeIdGen = new FlakeId()
   private readonly seckillKeyPrefix: string
   private readonly orderSecondsDuration: number
 
   constructor(
     private readonly configService: ConfigService,
     @InjectRedis() private readonly redisClient: Redis,
-    private readonly orderService: OrderService
+    private readonly orderService: OrderService,
+    protected readonly lockService: LockService,
+    protected readonly prismaService: PrismaService
   ) {
     this.seckillKeyPrefix = this.configService.get<GlobalConfigOptions>('global').seckillKeyPrefix
     this.orderSecondsDuration =
@@ -26,67 +33,102 @@ export class TradeService {
   }
 
   async buyCollection(id: Collection['id'], userId: JWTUserDto['userId']) {
+    const collection = await this.prismaService.collection.findFirst({
+      where: { id, isDeleted: false },
+      include: {
+        owners: {
+          select: {
+            onwerId: true
+          }
+        }
+      }
+    })
+
+    if (collection.owners.some((item) => item.onwerId === userId)) {
+      throw new BadRequestException(['collection is already owned'])
+    }
+
+    if (collection.creatorId === userId) {
+      throw new BadRequestException(['collection is created by you'])
+    }
+
     // 拿到藏品对应秒杀服务的 Redis Key
-    const seckillRedisKey = `${this.seckillKeyPrefix}:${id.toUpperCase()}`
+    const seckillKey = `${this.seckillKeyPrefix}:${id.toUpperCase()}`
     // 判断 Redis 中是否存在该藏品
-    const hasCollectionSeckill = await this.redisClient.exists(seckillRedisKey)
+    const hasCollectionSeckill = await this.redisClient.exists(seckillKey)
     if (!hasCollectionSeckill) {
       throw new BadRequestException(['collection not available for snap up'])
     }
     // 判断 Redis 中用户是否已有待支付订单
-    const hasOrder = await this.redisClient.exists(
-      `${seckillRedisKey}:USER:${userId.toUpperCase()}:ORDER`
-    )
+    const seckillOrderKey = this.orderService.getSeckillOrderKey(id, userId)
+    const hasOrder = await this.redisClient.exists(seckillOrderKey)
     if (!!hasOrder) {
       throw new BadRequestException(['snap up is successfully, please complete the payment'])
     }
 
     // 判断库存数量
-    const [stockTotal] = await this.redisClient.hmget(seckillRedisKey, 'total')
+    const [stockTotal] = await this.redisClient.hmget(seckillKey, 'total')
     if (!stockTotal || +stockTotal <= 0) {
       throw new BadRequestException(['out of stock'])
     }
-    // 下单操作 保证原子性
+
+    const lockName = `${seckillKey}:USER:LOCK:${userId.toUpperCase()}`
+
+    // 加锁
+    const isLocked = await this.lockService.tryLock(lockName, this.orderSecondsDuration)
     try {
-      // Redis 乐观锁 扣库存
-      await this.redisClient.watch(seckillRedisKey)
-      await this.redisClient.multi({ pipeline: false })
-      // 生成 OrderId [Date + 5位随机数]
-      const orderId =
-        dayjs().format('YYYYMMDDHHmmss') +
-        Math.floor(Math.random() * 99999)
-          .toString()
-          .padStart(5, '0')
+      if (isLocked) {
+        // 加锁成功 下单
+        const orderId = intformat(this.flakeIdGen.next(), 'dec')
+        // 订单过期时间
+        const expiredAt = +dayjs().add(this.orderSecondsDuration, 's')
 
-      // 订单过期时间
-      const expiredAt = dayjs().add(this.orderSecondsDuration, 's').toDate()
+        const stock = await this.redisClient.eval(
+          `
+            if (redis.call('hexists', KEYS[1], 'total') == 1) then
+              local stock = tonumber(redis.call('hget', KEYS[1], 'total'));
+              if (stock > 0) then
+                if (redis.call('exists', KEYS[2]) == 0) then
+                  redis.call('hset', KEYS[2], 'id', ARGV[1], 'payWay', ARGV[2], 'expiredAt', ARGV[3])
+                  redis.call('expire', KEYS[2], ARGV[4]);
+                  redis.call('hincrby', KEYS[1], 'total', -1);
+                  return stock;
+                end;
+                return 0;
+              end;
+                return 0;
+            end;
+              return 0;
+          `,
+          2,
+          seckillKey,
+          seckillOrderKey,
+          orderId,
+          OrderPayWayEnumDto.ALIPAY,
+          expiredAt,
+          dayjs(expiredAt).unix() - dayjs().unix()
+        )
 
-      const newOrderData = {
-        id: orderId,
-        payWay: OrderPayWayEnumDto.ALIPAY,
-        expiredAt
+        if (stock < 1) {
+          throw new Error('out of stock')
+        }
+
+        // 队列 -> 创建实体订单任务
+        await this.orderService.createOrderWithQueue(id, userId, {
+          id: orderId,
+          payWay: OrderPayWayEnumDto.ALIPAY,
+          expiredAt: dayjs(expiredAt).toDate()
+        })
+
+        return {
+          id: orderId,
+          payWay: OrderPayWayEnumDto.ALIPAY,
+          expiredAt
+        }
       }
-
-      await this.orderService.createSeckillOrder(id, userId, newOrderData)
-      await this.redisClient.expireat(
-        this.orderService.getSeckillOrderKey(id, userId),
-        dayjs(expiredAt).unix()
-      )
-      await this.redisClient.hincrby(seckillRedisKey, 'total', -1)
-      await this.redisClient.exec()
-      await this.redisClient.unwatch()
-
-      const seckillOrder = await this.orderService.findSeckillOrder(id, userId)
-
-      this.logger.debug('抢购成功', seckillOrder)
-
-      // 队列 -> 创建实体订单任务
-      await this.orderService.createOrderWithQueue(id, userId, newOrderData)
-
-      return { ...seckillOrder, expiredAt: +dayjs(seckillOrder.expiredAt) }
     } catch (error) {
       this.logger.debug(error)
-      await this.redisClient.unwatch()
+      this.lockService.unlock(lockName)
       throw new BadRequestException(['failed snap, try again'])
     }
   }

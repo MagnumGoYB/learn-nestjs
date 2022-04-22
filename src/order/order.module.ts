@@ -10,7 +10,11 @@ import { OrderProcessor } from './order.processor'
   imports: [
     PrismaModule,
     BullModule.registerQueue({
-      name: 'ORDER'
+      name: 'QUEUE:ORDER',
+      settings: {
+        stalledInterval: 3000,
+        maxStalledCount: 10
+      }
     })
   ],
   controllers: [OrderController],

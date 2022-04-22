@@ -5,7 +5,8 @@ import {
   Body,
   Get,
   Request,
-  UnauthorizedException
+  UnauthorizedException,
+  Logger
 } from '@nestjs/common'
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger'
 import { AppService } from './app.service'
@@ -17,6 +18,8 @@ import { RequestWithJWTUserDto } from './user/dto/user.dto'
 @ApiTags('通用')
 @Controller()
 export class AppController {
+  private readonly logger = new Logger(AppController.name)
+
   constructor(private readonly appService: AppService, private readonly smsService: SmsService) {}
 
   @ApiOperation({ summary: '登录' })

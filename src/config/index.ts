@@ -14,5 +14,5 @@ export default registerAs<GlobalConfigOptions>('global', () => ({
   smsKeyPrefix: ':SMS',
   orderSecondsDuration: process.env.ORDER_SECONDS_DURATION
     ? +process.env.ORDER_SECONDS_DURATION
-    : 10 * 60
+    : 10 * 60 // 默认值：10分钟
 }))

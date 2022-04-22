@@ -6,7 +6,7 @@ import { JWTUserDto } from '@/user/dto/user.dto'
 export class AuthService {
   constructor(private readonly jwtService: JwtService) {}
 
-  async sign(user: JWTUserDto) {
+  sign(user: JWTUserDto) {
     const payload = { sub: user }
     return { accessToken: this.jwtService.sign(payload) }
   }

@@ -16,6 +16,34 @@ export class AppService {
     private readonly smsService: SmsService
   ) {}
 
+  async signStressTestUsers() {
+    let count = 0
+    const tokens = []
+    while (count !== 100) {
+      const no = count.toString().padStart(4, '0')
+      const user = { name: `测试用户_${no}`, phone: `1000000${no}` }
+      const existUser = await this.userService.findOneByPhone(user.phone)
+      let info: JWTUserDto
+      if (!existUser) {
+        const result = await this.userService.createUser(user)
+        info = {
+          userId: result.id,
+          role: UserRole[result.role]
+        }
+        this.logger.debug('测试用户注入', user)
+      } else {
+        info = {
+          userId: existUser.id,
+          role: UserRole[existUser.role]
+        }
+      }
+      const token = this.authService.sign({ userId: info.userId, role: info.role })
+      tokens.push({ id: info.userId, name: user.name, ...token })
+      count++
+    }
+    return tokens
+  }
+
   async loginWithCaptcha(body: Pick<LoginDto, 'phone' | 'captcha'>): Promise<LoginResultDto> {
     await this.smsService.verifyLoginCode(body.phone, body.captcha)
 

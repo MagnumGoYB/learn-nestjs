@@ -37,22 +37,24 @@ model Collection {
   stockId      String               @unique @map("stock_id")
   creator      User                 @relation(fields: [creatorId], references: [id])
   stock        Stock                @relation(fields: [stockId], references: [id])
-  orders       Order?
+  orders       Order[]
   owners       CollectionRelOwner[]
 
   @@map("collections")
 }
 
 model CollectionRelOwner {
+  id           String     @id @default(cuid())
   onwer        User       @relation(fields: [onwerId], references: [id])
   onwerId      String     @map("owner_id")
   collection   Collection @relation(fields: [collectionId], references: [id])
   collectionId String     @map("collection_id")
+  num          Int
   isDeleted    Boolean    @default(false) @map("is_deleted")
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @updatedAt @map("updated_at")
 
-  @@id([onwerId, collectionId])
+  @@unique([onwerId, num])
   @@map("collection_rel_owner")
 }
 
@@ -74,7 +76,7 @@ model Order {
   payWay       OrderPayWayEnum @map("pay_way")
   expiredAt    DateTime        @map("expired_at")
   paidAt       DateTime?       @map("paid_at")
-  collectionId String          @unique @map("collection_id")
+  collectionId String          @map("collection_id")
   isDeleted    Boolean         @default(false) @map("is_deleted")
   createdAt    DateTime        @default(now()) @map("created_at")
   updatedAt    DateTime        @updatedAt @map("updated_at")

@@ -21,17 +21,17 @@ import GlobalConfig, { RedisConfig, RateLimiterConfig } from './config'
       load: [GlobalConfig, RateLimiterConfig, RedisConfig]
     }),
     RateLimiterModule.registerAsync({
-      useFactory: (configService: ConfigService) => configService.get('rate-limiter'),
+      useFactory: (config: ConfigService) => config.get('rate-limiter'),
       inject: [ConfigService]
     }),
     RedisModule.forRootAsync({
-      useFactory: (configService: ConfigService) => configService.get('redis'),
+      useFactory: (config: ConfigService) => config.get('redis'),
       inject: [ConfigService]
     }),
     BullModule.forRootAsync({
-      useFactory: (configService: ConfigService) => ({
-        redis: configService.get('redis').config,
-        prefix: configService.get('redis').config.keyPrefix
+      useFactory: (config: ConfigService) => ({
+        redis: config.get('redis').config,
+        prefix: config.get('redis').config.keyPrefix
       }),
       inject: [ConfigService]
     }),

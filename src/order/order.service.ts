@@ -20,7 +20,7 @@ export class OrderService {
     private readonly configService: ConfigService,
     @InjectRedis() private readonly redisClient: Redis,
     private readonly prismaService: PrismaService,
-    @InjectQueue('ORDER') private readonly orderQueue: Queue<Prisma.OrderUncheckedCreateInput>
+    @InjectQueue('QUEUE:ORDER') private readonly orderQueue: Queue<Prisma.OrderUncheckedCreateInput>
   ) {
     this.seckillKeyPrefix = this.configService.get<GlobalConfigOptions>('global').seckillKeyPrefix
   }
@@ -28,7 +28,7 @@ export class OrderService {
   getSeckillOrderKey(collectionId: Collection['id'], userId: JWTUserDto['userId']) {
     return `${
       this.seckillKeyPrefix
-    }:${collectionId.toUpperCase()}:USER:${userId.toUpperCase()}:ORDER`
+    }:${collectionId.toUpperCase()}:USER:ORDER:${userId.toUpperCase()}`
   }
 
   // 创建 Redis 秒杀订单
@@ -58,7 +58,11 @@ export class OrderService {
     ownerId: JWTUserDto['userId'],
     data: SeckillOrderDto
   ) {
-    return this.orderQueue.add('create', { ...data, collectionId, ownerId })
+    return this.orderQueue.add(
+      'create',
+      { ...data, collectionId, ownerId },
+      { removeOnComplete: true }
+    )
   }
 
   // 创建订单
